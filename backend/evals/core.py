@@ -1,5 +1,5 @@
-from config import ANTHROPIC_API_KEY, OPENAI_API_KEY
-from llm import Llm, stream_claude_response, stream_openai_response
+from config import ANTHROPIC_API_KEY, OPENAI_API_KEY, AWS_ACCESS_KEY, AWS_SECRET_KEY, AWS_REGION
+from llm import Llm, stream_claude_response, stream_openai_response, stream_aws_bedrock_response
 from prompts import assemble_prompt
 from prompts.types import Stack
 from openai.types.chat import ChatCompletionMessageParam
@@ -17,7 +17,19 @@ async def generate_code_core(
     async def process_chunk(_: str):
         pass
 
-    if (
+    if model == Llm.AWS_CLAUDE_3_5_SONNET:
+        if not AWS_ACCESS_KEY or not AWS_SECRET_KEY:
+            raise Exception("AWS credentials not found")
+            
+        completion = await stream_aws_bedrock_response(
+            prompt_messages,
+            api_key=AWS_ACCESS_KEY,
+            secret_key=AWS_SECRET_KEY,
+            region=AWS_REGION,
+            callback=lambda x: process_chunk(x),
+            model=model.value
+        )
+    elif (
         model == Llm.CLAUDE_3_SONNET
         or model == Llm.CLAUDE_3_5_SONNET_2024_06_20
         or model == Llm.CLAUDE_3_5_SONNET_2024_10_22

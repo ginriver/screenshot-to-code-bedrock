@@ -10,6 +10,9 @@ from config import (
     NUM_VARIANTS,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
+    AWS_ACCESS_KEY,
+    AWS_SECRET_KEY,
+    AWS_REGION,
     REPLICATE_API_KEY,
     SHOULD_MOCK_AI_RESPONSE,
 )
@@ -20,6 +23,7 @@ from llm import (
     stream_claude_response,
     stream_claude_response_native,
     stream_openai_response,
+    stream_claude_response_native_aws_bedrock
 )
 from fs_logging.core import write_logs
 from mock_llm import mock_completion
@@ -58,6 +62,9 @@ async def perform_image_generation(
     openai_api_key: str | None,
     openai_base_url: str | None,
     image_cache: dict[str, str],
+    bedrock_access_key: str | None = None,
+    bedrock_secret_key: str | None = None,
+    bedrock_region: str | None = None,
 ):
     replicate_api_key = REPLICATE_API_KEY
     if not should_generate_images:
@@ -66,10 +73,14 @@ async def perform_image_generation(
     if replicate_api_key:
         image_generation_model = "flux"
         api_key = replicate_api_key
+    elif bedrock_access_key and bedrock_secret_key:
+        # Use AWS Bedrock for image generation
+        print("Using AWS Bedrock for image generation")
+        return completion  # Currently return as-is since Bedrock image generation not implemented yet
     else:
         if not openai_api_key:
             print(
-                "No OpenAI API key and Replicate key found. Skipping image generation."
+                "No OpenAI API key, AWS Bedrock keys, and Replicate key found. Skipping image generation."
             )
             return completion
         image_generation_model = "dalle3"
@@ -95,6 +106,9 @@ class ExtractedParams:
     openai_api_key: str | None
     anthropic_api_key: str | None
     openai_base_url: str | None
+    bedrock_access_key: str | None
+    bedrock_secret_key: str | None
+    bedrock_region: str | None
 
 
 async def extract_params(
@@ -133,6 +147,17 @@ async def extract_params(
         params, "anthropicApiKey", ANTHROPIC_API_KEY
     )
 
+    bedrock_access_key = get_from_settings_dialog_or_env(
+        params, "awsAccessKey", AWS_ACCESS_KEY
+    )
+
+    bedrock_secret_key = get_from_settings_dialog_or_env(
+        params, "awsSecretKey", AWS_SECRET_KEY
+    )
+    bedrock_region = get_from_settings_dialog_or_env(
+        params, "awsRegion", AWS_REGION
+    )
+
     # Base URL for OpenAI API
     openai_base_url: str | None = None
     # Disable user-specified OpenAI Base URL in prod
@@ -154,6 +179,9 @@ async def extract_params(
         openai_api_key=openai_api_key,
         anthropic_api_key=anthropic_api_key,
         openai_base_url=openai_base_url,
+        bedrock_access_key=bedrock_access_key,
+        bedrock_secret_key=bedrock_secret_key,
+        bedrock_region=bedrock_region
     )
 
 
@@ -211,6 +239,9 @@ async def stream_code(websocket: WebSocket):
     input_mode = extracted_params.input_mode
     code_generation_model = extracted_params.code_generation_model
     openai_api_key = extracted_params.openai_api_key
+    bedrock_access_key = extracted_params.bedrock_access_key
+    bedrock_secret_key = extracted_params.bedrock_secret_key
+    bedrock_region = extracted_params.bedrock_region
     openai_base_url = extracted_params.openai_base_url
     anthropic_api_key = extracted_params.anthropic_api_key
     should_generate_images = extracted_params.should_generate_images
@@ -218,7 +249,9 @@ async def stream_code(websocket: WebSocket):
     # Auto-upgrade usage of older models
     code_generation_model = auto_upgrade_model(code_generation_model)
 
-    print(f"Generating {stack} code in {input_mode} mode")
+    print(
+        f"Generating {stack} code in {input_mode} mode using {code_generation_model}..."
+    )
 
     for i in range(NUM_VARIANTS):
         await send_message("status", "Generating code...", i)
@@ -248,22 +281,35 @@ async def stream_code(websocket: WebSocket):
     else:
         try:
             if input_mode == "video":
-                if not anthropic_api_key:
+                if not anthropic_api_key and not bedrock_access_key and not bedrock_secret_key:
                     await throw_error(
-                        "Video only works with Anthropic models. No Anthropic API key found. Please add the environment variable ANTHROPIC_API_KEY to backend/.env or in the settings dialog"
+                        "Video only works with Anthropic models. Neither Anthropic API key nor Bedrock keys found. Please add the environment variable ANTHROPIC_API_KEY to backend/.env or in the settings dialog"
                     )
                     raise Exception("No Anthropic key")
-
-                completions = [
-                    await stream_claude_response_native(
-                        system_prompt=VIDEO_PROMPT,
-                        messages=prompt_messages,  # type: ignore
-                        api_key=anthropic_api_key,
-                        callback=lambda x: process_chunk(x, 0),
-                        model=Llm.CLAUDE_3_OPUS,
-                        include_thinking=True,
-                    )
-                ]
+                if anthropic_api_key:
+                    completions = [
+                        await stream_claude_response_native(
+                            system_prompt=VIDEO_PROMPT,
+                            messages=prompt_messages,  # type: ignore
+                            api_key=anthropic_api_key,
+                            callback=lambda x: process_chunk(x, 0),
+                            model=Llm.CLAUDE_3_OPUS,
+                            include_thinking=True,
+                        )
+                    ]
+                else:
+                    completions = [
+                        await stream_claude_response_native_aws_bedrock(
+                            system_prompt=VIDEO_PROMPT,
+                            messages=prompt_messages,  # type: ignore
+                            callback=lambda x: process_chunk(x, 0),
+                            model=Llm.CLAUDE_3_OPUS,
+                            access_key=bedrock_access_key,
+                            secret_key=bedrock_secret_key,
+                            region=bedrock_region,
+                            include_thinking=True
+                        )
+                    ]
             else:
 
                 # Depending on the presence and absence of various keys,
@@ -275,6 +321,8 @@ async def stream_code(websocket: WebSocket):
                     variant_models = ["openai", "openai"]
                 elif anthropic_api_key:
                     variant_models = ["anthropic", "anthropic"]
+                elif bedrock_access_key and bedrock_secret_key:
+                    variant_models = ["bedrock", "bedrock"]
                 else:
                     await throw_error(
                         "No OpenAI or Anthropic API key found. Please add the environment variable OPENAI_API_KEY or ANTHROPIC_API_KEY to backend/.env or in the settings dialog. If you add it to .env, make sure to restart the backend server."
@@ -307,7 +355,24 @@ async def stream_code(websocket: WebSocket):
                                 prompt_messages,
                                 api_key=anthropic_api_key,
                                 callback=lambda x, i=index: process_chunk(x, i),
-                                model=Llm.CLAUDE_3_5_SONNET_2024_06_20,
+                                model=Llm.CLAUDE_3_5_SONNET_2024_10_22,
+                            )
+                        )
+                    elif model == "bedrock":
+                        if bedrock_access_key is None or bedrock_secret_key is None:
+                            await throw_error("Bedrock keys are missing.")
+                            raise Exception("Bedrock keys are missing.")
+
+                        tasks.append(
+                            stream_claude_response_native_aws_bedrock(
+                                system_prompt=VIDEO_PROMPT,
+                                messages=prompt_messages,
+                                callback=lambda x, i=index: process_chunk(x, i),
+                                model=Llm.AWS_CLAUDE_3_5_SONNET,
+                                access_key=bedrock_access_key,
+                                secret_key=bedrock_secret_key,
+                                region=bedrock_region,
+                                include_thinking=True
                             )
                         )
 
@@ -391,6 +456,9 @@ async def stream_code(websocket: WebSocket):
             openai_api_key,
             openai_base_url,
             image_cache,
+            bedrock_access_key,
+            bedrock_secret_key,
+            bedrock_region
         )
         for completion in completions
     ]

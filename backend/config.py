@@ -2,6 +2,7 @@
 # Setting to True will stream a mock response instead of calling the OpenAI API
 # TODO: Should only be set to true when value is 'True', not any abitrary truthy value
 import os
+from typing import Optional
 
 NUM_VARIANTS = 2
 
@@ -9,6 +10,9 @@ NUM_VARIANTS = 2
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", None)
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", None)
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", None)
+AWS_ACCESS_KEY: Optional[str] = os.getenv("AWS_ACCESS_KEY", None)
+AWS_SECRET_KEY: Optional[str] = os.getenv("AWS_SECRET_KEY", None)
+AWS_REGION: Optional[str] = os.getenv("AWS_REGION", "us-east-1")
 
 # Image generation (optional)
 REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY", None)

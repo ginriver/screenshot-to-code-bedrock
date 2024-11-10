@@ -133,6 +133,89 @@ function SettingsDialog({ settings, setSettings }: Props) {
           </div>
 
           <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="aws-bedrock">
+              <AccordionTrigger>AWS Bedrock Configuration</AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="aws-access-key">
+                      <div>AWS Access Key</div>
+                      <div className="font-light mt-1 text-xs leading-relaxed">
+                        Your AWS IAM user access key with Bedrock permissions
+                      </div>
+                    </Label>
+
+                    <Input
+                      id="aws-access-key"
+                      placeholder="AWS Access Key"
+                      value={settings.awsAccessKey || ""}
+                      onChange={(e) =>
+                        setSettings((s) => ({
+                          ...s,
+                          awsAccessKey: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="aws-secret-key">
+                      <div>AWS Secret Key</div>
+                      <div className="font-light mt-1 text-xs leading-relaxed">
+                        Your AWS IAM user secret key
+                      </div>
+                    </Label>
+
+                    <Input
+                      id="aws-secret-key"
+                      type="password"
+                      placeholder="AWS Secret Key"
+                      value={settings.awsSecretKey || ""}
+                      onChange={(e) =>
+                        setSettings((s) => ({
+                          ...s,
+                          awsSecretKey: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="aws-region">
+                      <div>AWS Region</div>
+                      <div className="font-light mt-1 text-xs leading-relaxed">
+                        The AWS region where Bedrock service is enabled
+                      </div>
+                    </Label>
+
+                    <Select
+                      name="aws-region"
+                      value={settings.awsRegion || "us-east-1"}
+                      onValueChange={(value) =>
+                        setSettings((s) => ({
+                          ...s,
+                          awsRegion: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        {settings.awsRegion || "Select Region"}
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="us-east-1">US East (N. Virginia)</SelectItem>
+                        <SelectItem value="us-west-2">US West (Oregon)</SelectItem>
+                        <SelectItem value="ap-southeast-1">Asia Pacific (Singapore)</SelectItem>
+                        <SelectItem value="ap-northeast-1">Asia Pacific (Tokyo)</SelectItem>
+                        <SelectItem value="eu-central-1">Europe (Frankfurt)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
+          <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="item-1">
               <AccordionTrigger>Screenshot by URL Config</AccordionTrigger>
               <AccordionContent>
